@@ -58,6 +58,16 @@ function showSection(sectionId) {
         targetSection.classList.add('active');
     }
 
+    // Update navigation
+    const dashboardLink = document.getElementById('dashboardLink');
+    if (dashboardLink) {
+        if (sectionId === 'dashboard' && currentUser) {
+            dashboardLink.style.display = 'block';
+        } else {
+            dashboardLink.style.display = 'none';
+        }
+    }
+
     // If showing dashboard, load user data
     if (sectionId === 'dashboard' && currentUser) {
         loadUserData();
@@ -184,13 +194,18 @@ async function loadUserData() {
         const accountsResponse = await fetch(`${API_BASE}/accounts/user/${currentUser.id}`);
         if (accountsResponse.ok) {
             userAccounts = await accountsResponse.json();
+            console.log('Accounts loaded:', userAccounts);
             displayAccounts();
-            populateFromAccountDropdown();
-        }
-
-        // If user has accounts, load transactions for the first account
-        if (userAccounts.length > 0) {
-            await loadTransactions(userAccounts[0].id);
+            populateFromAccountDropdown(); // This is the key function
+            
+            // If user has accounts, load transactions for the first account
+            if (userAccounts.length > 0) {
+                await loadTransactions(userAccounts[0].id);
+            } else {
+                displayTransactions(); // Show empty state
+            }
+        } else {
+            throw new Error('Failed to load accounts');
         }
 
     } catch (error) {
@@ -211,7 +226,7 @@ function displayAccounts() {
                 <i class="fas fa-wallet"></i>
                 <p>No accounts found</p>
                 <button class="btn btn-primary" onclick="createAccount()">
-                    Create Your First Account
+                    <i class="fas fa-plus"></i> Create Account with $5000
                 </button>
             </div>
         `;
@@ -221,29 +236,117 @@ function displayAccounts() {
     accountsList.innerHTML = userAccounts.map(account => `
         <div class="account-item">
             <div class="account-info">
-                <div class="account-type">${account.accountType}</div>
-                <div class="account-number">${account.accountNumber}</div>
+                <div class="account-type">${account.accountType} • ${account.accountNumber}</div>
+                <div class="account-balance">$${formatCurrency(account.balance)}</div>
             </div>
-            <div class="account-balance">
-                $${formatCurrency(account.balance)}
+            <div class="account-actions">
+                <button class="btn btn-sm btn-success" onclick="addDemoMoney(${account.id}, 5000)" title="Add $5000">
+                    <i class="fas fa-coins"></i> Add $5K
+                </button>
+                <button class="btn btn-sm btn-outline" onclick="loadTransactions(${account.id})">
+                    <i class="fas fa-history"></i> History
+                </button>
             </div>
-            <button class="btn btn-sm btn-outline" onclick="loadTransactions(${account.id})">
-                View Transactions
-            </button>
         </div>
     `).join('');
+
+    // Update quick stats
+    updateQuickStats();
 }
 
+// FIXED: Populate the From Account dropdown - This is the main fix
 function populateFromAccountDropdown() {
+    console.log('populateFromAccountDropdown called with accounts:', userAccounts);
+    
     const fromAccountSelect = document.getElementById('fromAccount');
-    if (!fromAccountSelect) return;
+    if (!fromAccountSelect) {
+        console.error('From Account select element not found!');
+        return;
+    }
 
-    fromAccountSelect.innerHTML = '<option value="">Select account</option>' +
-        userAccounts.map(account => `
-            <option value="${account.id}">
-                ${account.accountNumber} ($${formatCurrency(account.balance)})
-            </option>
-        `).join('');
+    // Clear existing options
+    fromAccountSelect.innerHTML = '<option value="">Select account</option>';
+    
+    if (userAccounts.length === 0) {
+        const option = document.createElement('option');
+        option.value = "";
+        option.textContent = "No accounts available";
+        option.disabled = true;
+        fromAccountSelect.appendChild(option);
+        return;
+    }
+
+    // Add user's accounts to dropdown
+    userAccounts.forEach(account => {
+        const option = document.createElement('option');
+        option.value = account.id;
+        option.textContent = `${account.accountNumber} - $${formatCurrency(account.balance)} (${account.accountType})`;
+        fromAccountSelect.appendChild(option);
+    });
+
+    console.log('Dropdown populated with', userAccounts.length, 'accounts');
+}
+
+// Populate transaction account filter
+function populateTransactionFilter() {
+    const filterSelect = document.getElementById('transactionAccountFilter');
+    if (!filterSelect) return;
+
+    filterSelect.innerHTML = '<option value="all">All Accounts</option>';
+    
+    userAccounts.forEach(account => {
+        const option = document.createElement('option');
+        option.value = account.id;
+        option.textContent = `${account.accountNumber} (${account.accountType})`;
+        filterSelect.appendChild(option);
+    });
+}
+
+// Filter transactions by account
+function filterTransactions() {
+    const selectedAccountId = document.getElementById('transactionAccountFilter').value;
+    
+    if (selectedAccountId === 'all') {
+        displayTransactions();
+    } else {
+        const filteredTransactions = userTransactions.filter(transaction => 
+            (transaction.fromAccount && transaction.fromAccount.id == selectedAccountId) ||
+            (transaction.toAccount && transaction.toAccount.id == selectedAccountId)
+        );
+        displayFilteredTransactions(filteredTransactions);
+    }
+}
+
+// Display filtered transactions
+function displayFilteredTransactions(transactions) {
+    const transactionsList = document.getElementById('transactionsList');
+    if (!transactionsList) return;
+
+    if (transactions.length === 0) {
+        transactionsList.innerHTML = `
+            <div class="empty-state">
+                <i class="fas fa-receipt"></i>
+                <p>No transactions found for this account</p>
+            </div>
+        `;
+        return;
+    }
+
+    transactionsList.innerHTML = transactions.map(transaction => `
+        <div class="transaction-item">
+            <div class="transaction-info">
+                <div class="transaction-type">${transaction.transactionType}</div>
+                <div class="transaction-description">${transaction.description || 'No description'}</div>
+                <div class="transaction-date">${formatDate(transaction.transactionDate)}</div>
+            </div>
+            <div class="transaction-amount ${getTransactionAmountClass(transaction)}">
+                ${formatTransactionAmount(transaction)}
+            </div>
+            <div class="transaction-status ${transaction.status.toLowerCase()}">
+                ${transaction.status}
+            </div>
+        </div>
+    `).join('');
 }
 
 async function loadTransactions(accountId) {
@@ -290,42 +393,141 @@ function displayTransactions() {
     `).join('');
 }
 
+// Account Management Functions
+async function createAccount() {
+    if (!currentUser) return;
+
+    try {
+        showLoading('Creating account with $5000 demo money...');
+        
+        const response = await fetch(`${API_BASE}/accounts/create?userId=${currentUser.id}`, {
+            method: 'POST'
+        });
+
+        if (response.ok) {
+            const account = await response.json();
+            showNotification(`Account ${account.accountNumber} created with $5000!`, 'success');
+            await loadUserData();
+        } else {
+            throw new Error('Failed to create account');
+        }
+    } catch (error) {
+        console.error('Error creating account:', error);
+        showNotification(error.message, 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+// Add demo money to all accounts
+async function addDemoMoneyToAllAccounts() {
+    if (!currentUser) return;
+
+    try {
+        showLoading('Adding $5000 to all your accounts...');
+        
+        const response = await fetch(`${API_BASE}/accounts/user/${currentUser.id}/add-demo-money`, {
+            method: 'POST'
+        });
+
+        if (response.ok) {
+            showNotification('Successfully added $5000 to all your accounts!', 'success');
+            await loadUserData();
+        } else {
+            const errorText = await response.text();
+            throw new Error(errorText || 'Failed to add demo money');
+        }
+    } catch (error) {
+        console.error('Error adding demo money:', error);
+        showNotification(error.message, 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+// Add demo money to specific account
+async function addDemoMoney(accountId, amount = 5000) {
+    try {
+        showLoading(`Adding $${amount} demo money...`);
+        
+        const response = await fetch(`${API_BASE}/accounts/${accountId}/deposit?amount=${amount}`, {
+            method: 'POST'
+        });
+
+        if (response.ok) {
+            showNotification(`Successfully added $${amount} demo money!`, 'success');
+            await loadUserData();
+        } else {
+            const errorText = await response.text();
+            throw new Error(errorText || 'Failed to add demo money');
+        }
+    } catch (error) {
+        console.error('Error adding demo money:', error);
+        showNotification(error.message, 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+// Update quick stats
+function updateQuickStats() {
+    const totalBalance = userAccounts.reduce((sum, account) => sum + parseFloat(account.balance), 0);
+    const totalAccounts = userAccounts.length;
+    const totalTransactions = userTransactions.length;
+
+    document.getElementById('totalBalance').textContent = `$${formatCurrency(totalBalance)}`;
+    document.getElementById('totalAccounts').textContent = totalAccounts;
+    document.getElementById('totalTransactions').textContent = totalTransactions;
+}
+
 // Transaction Functions
 async function handleTransfer(event) {
     event.preventDefault();
     
     const formData = new FormData(event.target);
-    const transferData = {
-        fromAccountId: parseInt(formData.get('fromAccountId')),
-        toAccountId: formData.get('toAccountId'), // This might be account number, need to handle
-        amount: parseFloat(formData.get('amount')),
-        description: formData.get('description') || 'Fund Transfer'
-    };
+    const fromAccountId = formData.get('fromAccountId');
+    const toAccountNumber = formData.get('toAccountId');
+    const amount = parseFloat(formData.get('amount'));
+    const description = formData.get('description') || 'Fund Transfer';
 
     // Validation
-    const fromAccount = userAccounts.find(acc => acc.id === transferData.fromAccountId);
-    if (!fromAccount) {
-        showNotification('Please select a valid from account', 'error');
+    if (!fromAccountId) {
+        showNotification('Please select a from account', 'error');
         return;
     }
 
-    if (fromAccount.balance < transferData.amount) {
-        showNotification('Insufficient balance', 'error');
+    if (!toAccountNumber) {
+        showNotification('Please enter a destination account number', 'error');
         return;
     }
 
-    if (transferData.amount <= 0) {
+    if (!amount || amount <= 0) {
         showNotification('Amount must be greater than zero', 'error');
+        return;
+    }
+
+    // Find the from account to check balance
+    const fromAccount = userAccounts.find(acc => acc.id == fromAccountId);
+    if (!fromAccount) {
+        showNotification('Invalid from account', 'error');
+        return;
+    }
+
+    if (fromAccount.balance < amount) {
+        showNotification('Insufficient balance', 'error');
         return;
     }
 
     try {
         showLoading('Processing transfer...');
         
-        // First, we need to get the account ID from the account number
-        // For now, we'll assume toAccountId is the account ID
-        // In a real application, you'd look up the account by number first
-        
+        const transferData = {
+            fromAccountId: parseInt(fromAccountId),
+            toAccountId: toAccountNumber, // This should be the account ID
+            amount: amount,
+            description: description
+        };
+
         const response = await fetch(`${API_BASE}/transactions/transfer`, {
             method: 'POST',
             headers: {
@@ -337,39 +539,14 @@ async function handleTransfer(event) {
         const data = await response.json();
 
         if (response.ok) {
-            showNotification('Transfer completed successfully!', 'success');
+            showNotification(`Transfer of $${amount} completed successfully!`, 'success');
             event.target.reset();
-            await loadUserData(); // Refresh data
+            await loadUserData(); // Refresh all data
         } else {
             throw new Error(typeof data === 'string' ? data : data.error || 'Transfer failed');
         }
     } catch (error) {
         console.error('Transfer error:', error);
-        showNotification(error.message, 'error');
-    } finally {
-        hideLoading();
-    }
-}
-
-async function createAccount() {
-    if (!currentUser) return;
-
-    try {
-        showLoading('Creating account...');
-        
-        const response = await fetch(`${API_BASE}/accounts/create?userId=${currentUser.id}`, {
-            method: 'POST'
-        });
-
-        if (response.ok) {
-            const account = await response.json();
-            showNotification(`Account ${account.accountNumber} created successfully!`, 'success');
-            await loadUserData();
-        } else {
-            throw new Error('Failed to create account');
-        }
-    } catch (error) {
-        console.error('Error creating account:', error);
         showNotification(error.message, 'error');
     } finally {
         hideLoading();
@@ -494,6 +671,27 @@ window.addEventListener('unhandledrejection', function(event) {
     handleApiError(event.reason);
 });
 
+// Debug function to check accounts
+function debugAccounts() {
+    console.log('Current User:', currentUser);
+    console.log('User Accounts:', userAccounts);
+    console.log('From Account Select:', document.getElementById('fromAccount'));
+}
+
+// Manual refresh function
+async function refreshAccounts() {
+    console.log('Manual refresh triggered');
+    await loadUserData();
+}
+
+// Emergency fix - manually populate dropdown after page load
+setTimeout(() => {
+    if (currentUser && userAccounts.length > 0) {
+        console.log('Emergency fix: Manually populating dropdown');
+        populateFromAccountDropdown();
+    }
+}, 2000);
+
 // Add CSS for loading overlay and additional styles
 const additionalStyles = `
 .loading-overlay {
@@ -517,11 +715,17 @@ const additionalStyles = `
 .loading-spinner i {
     font-size: 2rem;
     margin-bottom: 1rem;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
 }
 
 .account-item {
     display: flex;
-    justify-content: between;
+    justify-content: space-between;
     align-items: center;
     padding: 1rem;
     border: 1px solid var(--border-color);
@@ -532,7 +736,7 @@ const additionalStyles = `
 
 .transaction-item {
     display: flex;
-    justify-content: between;
+    justify-content: space-between;
     align-items: center;
     padding: 1rem;
     border-bottom: 1px solid var(--border-color);
@@ -575,6 +779,11 @@ const additionalStyles = `
     gap: 1rem;
 }
 
+.account-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
 @media (max-width: 768px) {
     .form-row {
         grid-template-columns: 1fr;
@@ -584,6 +793,11 @@ const additionalStyles = `
         flex-direction: column;
         align-items: flex-start;
         gap: 0.5rem;
+    }
+    
+    .account-actions {
+        width: 100%;
+        justify-content: space-between;
     }
 }
 `;
