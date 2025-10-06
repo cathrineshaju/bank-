@@ -691,6 +691,298 @@ setTimeout(() => {
         populateFromAccountDropdown();
     }
 }, 2000);
+// Setup event listeners for new forms
+function setupEventListeners() {
+    // Existing event listeners...
+    const loginForm = document.getElementById('loginForm');
+    const registerForm = document.getElementById('registerForm');
+    const transferForm = document.getElementById('transferForm');
+    
+    if (loginForm) loginForm.addEventListener('submit', handleLogin);
+    if (registerForm) registerForm.addEventListener('submit', handleRegister);
+    if (transferForm) transferForm.addEventListener('submit', handleTransfer);
+    
+    // NEW: Add event listeners for withdraw and internal transfer
+    const withdrawForm = document.getElementById('withdrawForm');
+    const internalTransferForm = document.getElementById('internalTransferForm');
+    
+    if (withdrawForm) withdrawForm.addEventListener('submit', handleWithdraw);
+    if (internalTransferForm) internalTransferForm.addEventListener('submit', handleInternalTransfer);
+}
+
+// Populate all account dropdowns
+function populateAllAccountDropdowns() {
+    populateFromAccountDropdown();
+    populateWithdrawAccountDropdown();
+    populateInternalTransferDropdowns();
+}
+
+// Populate withdraw account dropdown
+function populateWithdrawAccountDropdown() {
+    const withdrawAccountSelect = document.getElementById('withdrawAccount');
+    if (!withdrawAccountSelect) return;
+
+    withdrawAccountSelect.innerHTML = '<option value="">Select account</option>';
+    
+    userAccounts.forEach(account => {
+        const option = document.createElement('option');
+        option.value = account.id;
+        option.textContent = `${account.accountNumber} - $${formatCurrency(account.balance)} (${account.accountType})`;
+        withdrawAccountSelect.appendChild(option);
+    });
+}
+
+// Populate internal transfer dropdowns
+function populateInternalTransferDropdowns() {
+    const fromAccountSelect = document.getElementById('internalFromAccount');
+    const toAccountSelect = document.getElementById('internalToAccount');
+    
+    if (!fromAccountSelect || !toAccountSelect) return;
+
+    // Clear existing options
+    fromAccountSelect.innerHTML = '<option value="">Select account</option>';
+    toAccountSelect.innerHTML = '<option value="">Select account</option>';
+    
+    // Add user's accounts to both dropdowns
+    userAccounts.forEach(account => {
+        const fromOption = document.createElement('option');
+        fromOption.value = account.id;
+        fromOption.textContent = `${account.accountNumber} - $${formatCurrency(account.balance)} (${account.accountType})`;
+        fromAccountSelect.appendChild(fromOption);
+        
+        const toOption = document.createElement('option');
+        toOption.value = account.id;
+        toOption.textContent = `${account.accountNumber} - $${formatCurrency(account.balance)} (${account.accountType})`;
+        toAccountSelect.appendChild(toOption);
+    });
+}
+
+// Handle withdraw form submission
+async function handleWithdraw(event) {
+    event.preventDefault();
+    
+    const formData = new FormData(event.target);
+    const accountId = formData.get('accountId');
+    const amount = parseFloat(formData.get('amount'));
+
+    // Validation
+    if (!accountId) {
+        showNotification('Please select an account', 'error');
+        return;
+    }
+
+    if (!amount || amount <= 0) {
+        showNotification('Amount must be greater than zero', 'error');
+        return;
+    }
+
+    // Find the account to check balance
+    const account = userAccounts.find(acc => acc.id == accountId);
+    if (!account) {
+        showNotification('Invalid account', 'error');
+        return;
+    }
+
+    if (account.balance < amount) {
+        showNotification('Insufficient balance for withdrawal', 'error');
+        return;
+    }
+
+    try {
+        showLoading('Processing withdrawal...');
+        
+        const response = await fetch(`${API_BASE}/accounts/${accountId}/withdraw?amount=${amount}`, {
+            method: 'POST'
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            showNotification(`Successfully withdrew $${amount} from your account!`, 'success');
+            event.target.reset();
+            await loadUserData(); // Refresh all data
+        } else {
+            throw new Error(data.error || data.message || 'Withdrawal failed');
+        }
+    } catch (error) {
+        console.error('Withdrawal error:', error);
+        showNotification(error.message, 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+// Handle internal transfer between user's own accounts
+async function handleInternalTransfer(event) {
+    event.preventDefault();
+    
+    const formData = new FormData(event.target);
+    const fromAccountId = formData.get('fromAccountId');
+    const toAccountId = formData.get('toAccountId');
+    const amount = parseFloat(formData.get('amount'));
+    const description = formData.get('description') || 'Internal Transfer';
+
+    // Validation
+    if (!fromAccountId || !toAccountId) {
+        showNotification('Please select both from and to accounts', 'error');
+        return;
+    }
+
+    if (fromAccountId === toAccountId) {
+        showNotification('Cannot transfer to the same account', 'error');
+        return;
+    }
+
+    if (!amount || amount <= 0) {
+        showNotification('Amount must be greater than zero', 'error');
+        return;
+    }
+
+    // Find the from account to check balance
+    const fromAccount = userAccounts.find(acc => acc.id == fromAccountId);
+    if (!fromAccount) {
+        showNotification('Invalid from account', 'error');
+        return;
+    }
+
+    if (fromAccount.balance < amount) {
+        showNotification('Insufficient balance for transfer', 'error');
+        return;
+    }
+
+    try {
+        showLoading('Processing transfer...');
+        
+        const response = await fetch(`${API_BASE}/accounts/transfer?fromAccountId=${fromAccountId}&toAccountId=${toAccountId}&amount=${amount}&description=${encodeURIComponent(description)}`, {
+            method: 'POST'
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            showNotification(`Successfully transferred $${amount} between your accounts!`, 'success');
+            event.target.reset();
+            await loadUserData(); // Refresh all data
+        } else {
+            throw new Error(data.error || data.message || 'Transfer failed');
+        }
+    } catch (error) {
+        console.error('Internal transfer error:', error);
+        showNotification(error.message, 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+// Update the loadUserData function to populate all dropdowns
+async function loadUserData() {
+    if (!currentUser) return;
+
+    try {
+        showLoading('Loading your data...');
+        
+        // Load user accounts
+        const accountsResponse = await fetch(`${API_BASE}/accounts/user/${currentUser.id}`);
+        if (accountsResponse.ok) {
+            userAccounts = await accountsResponse.json();
+            console.log('Accounts loaded:', userAccounts);
+            displayAccounts();
+            populateAllAccountDropdowns(); // Updated this line
+            
+            // If user has accounts, load transactions for the first account
+            if (userAccounts.length > 0) {
+                await loadTransactions(userAccounts[0].id);
+            } else {
+                displayTransactions(); // Show empty state
+            }
+        } else {
+            throw new Error('Failed to load accounts');
+        }
+
+    } catch (error) {
+        console.error('Error loading user data:', error);
+        showNotification('Error loading data', 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+// Update account display to show withdraw buttons
+function displayAccounts() {
+    const accountsList = document.getElementById('accountsList');
+    if (!accountsList) return;
+
+    if (userAccounts.length === 0) {
+        accountsList.innerHTML = `
+            <div class="empty-state">
+                <i class="fas fa-wallet"></i>
+                <p>No accounts found</p>
+                <button class="btn btn-primary" onclick="createAccount()">
+                    <i class="fas fa-plus"></i> Create Account with $5000
+                </button>
+            </div>
+        `;
+        return;
+    }
+
+    accountsList.innerHTML = userAccounts.map(account => `
+        <div class="account-item">
+            <div class="account-info">
+                <div class="account-type">${account.accountType} • ${account.accountNumber}</div>
+                <div class="account-balance">$${formatCurrency(account.balance)}</div>
+            </div>
+            <div class="account-actions">
+                <button class="btn btn-sm btn-success" onclick="addDemoMoney(${account.id}, 5000)" title="Add $5000">
+                    <i class="fas fa-coins"></i> Add $5K
+                </button>
+                <button class="btn btn-sm btn-warning" onclick="quickWithdraw(${account.id})" title="Withdraw $100">
+                    <i class="fas fa-money-bill-wave"></i> Withdraw $100
+                </button>
+                <button class="btn btn-sm btn-outline" onclick="loadTransactions(${account.id})">
+                    <i class="fas fa-history"></i> History
+                </button>
+            </div>
+        </div>
+    `).join('');
+
+    updateQuickStats();
+}
+
+// Quick withdraw function
+async function quickWithdraw(accountId, amount = 100) {
+    const account = userAccounts.find(acc => acc.id == accountId);
+    if (!account) {
+        showNotification('Account not found', 'error');
+        return;
+    }
+
+    if (account.balance < amount) {
+        showNotification('Insufficient balance for withdrawal', 'error');
+        return;
+    }
+
+    try {
+        showLoading(`Withdrawing $${amount}...`);
+        
+        const response = await fetch(`${API_BASE}/accounts/${accountId}/withdraw?amount=${amount}`, {
+            method: 'POST'
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            showNotification(`Successfully withdrew $${amount}!`, 'success');
+            await loadUserData(); // Refresh all data
+        } else {
+            throw new Error(data.error || data.message || 'Withdrawal failed');
+        }
+    } catch (error) {
+        console.error('Quick withdrawal error:', error);
+        showNotification(error.message, 'error');
+    } finally {
+        hideLoading();
+    }
+}
 
 // Add CSS for loading overlay and additional styles
 const additionalStyles = `

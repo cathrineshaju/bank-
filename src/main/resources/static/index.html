@@ -19,6 +19,7 @@
                 <a href="#" class="nav-link" onclick="showSection('home')">Home</a>
                 <a href="#" class="nav-link" onclick="showSection('login')">Login</a>
                 <a href="#" class="nav-link" onclick="showSection('register')">Register</a>
+                <a href="#" class="nav-link" id="dashboardLink" style="display: none;" onclick="showSection('dashboard')">Dashboard</a>
             </div>
         </div>
     </nav>
@@ -41,7 +42,7 @@
                     </div>
                 </div>
                 <div class="hero-image">
-                    <i class="fas fa-mobile-banking"></i>
+                    <i class="fas fa-piggy-bank"></i>
                 </div>
             </div>
         </section>
@@ -166,24 +167,133 @@
         <section id="dashboard" class="section">
             <div class="dashboard-container">
                 <div class="dashboard-header">
-                    <h2>Welcome, <span id="userName"></span>!</h2>
-                    <button class="btn btn-outline" onclick="logout()">
-                        <i class="fas fa-sign-out-alt"></i> Logout
-                    </button>
+                    <div>
+                        <h2>Welcome, <span id="userName"></span>!</h2>
+                        <p class="user-email" id="userEmail"></p>
+                    </div>
+                    <div class="header-actions">
+                        <button class="btn btn-success" onclick="addDemoMoneyToAllAccounts()">
+                            <i class="fas fa-coins"></i> Add $5000 to All Accounts
+                        </button>
+                        <button class="btn btn-outline" onclick="logout()">
+                            <i class="fas fa-sign-out-alt"></i> Logout
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Quick Stats -->
+                <div class="quick-stats">
+                    <div class="stat-card">
+                        <div class="stat-icon">
+                            <i class="fas fa-wallet"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="totalBalance">$0.00</h3>
+                            <p>Total Balance</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">
+                            <i class="fas fa-credit-card"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="totalAccounts">0</h3>
+                            <p>Total Accounts</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">
+                            <i class="fas fa-exchange-alt"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="totalTransactions">0</h3>
+                            <p>Transactions</p>
+                        </div>
+                    </div>
                 </div>
                 
                 <div class="dashboard-grid">
                     <!-- Accounts Summary -->
                     <div class="dashboard-card">
-                        <h3>Accounts Summary</h3>
+                        <div class="card-header">
+                            <h3>Your Accounts</h3>
+                            <button class="btn btn-sm btn-primary" onclick="createAccount()">
+                                <i class="fas fa-plus"></i> New Account
+                            </button>
+                        </div>
                         <div id="accountsList" class="accounts-list">
                             <!-- Accounts will be loaded here -->
                         </div>
                     </div>
                     
-                    <!-- Quick Transfer -->
+                    <!-- Withdraw Money -->
                     <div class="dashboard-card">
-                        <h3>Quick Transfer</h3>
+                        <div class="card-header">
+                            <h3>Withdraw Money</h3>
+                        </div>
+                        <form id="withdrawForm" class="transfer-form">
+                            <div class="form-group">
+                                <label for="withdrawAccount">From Account</label>
+                                <select id="withdrawAccount" name="accountId" required>
+                                    <option value="">Select account</option>
+                                </select>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="withdrawAmount">Amount ($)</label>
+                                <input type="number" id="withdrawAmount" name="amount" 
+                                       step="0.01" min="0.01" placeholder="0.00" required>
+                            </div>
+                            
+                            <button type="submit" class="btn btn-warning btn-full">
+                                <i class="fas fa-money-bill-wave"></i> Withdraw Money
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <!-- Transfer Between Accounts -->
+                    <div class="dashboard-card">
+                        <div class="card-header">
+                            <h3>Transfer Between Accounts</h3>
+                        </div>
+                        <form id="internalTransferForm" class="transfer-form">
+                            <div class="form-group">
+                                <label for="internalFromAccount">From Account</label>
+                                <select id="internalFromAccount" name="fromAccountId" required>
+                                    <option value="">Select account</option>
+                                </select>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="internalToAccount">To Account</label>
+                                <select id="internalToAccount" name="toAccountId" required>
+                                    <option value="">Select account</option>
+                                </select>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="internalAmount">Amount ($)</label>
+                                <input type="number" id="internalAmount" name="amount" 
+                                       step="0.01" min="0.01" placeholder="0.00" required>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="internalDescription">Description</label>
+                                <input type="text" id="internalDescription" name="description" 
+                                       placeholder="Transfer description (optional)">
+                            </div>
+                            
+                            <button type="submit" class="btn btn-info btn-full">
+                                <i class="fas fa-exchange-alt"></i> Transfer Between Accounts
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <!-- Quick Transfer to Other Users -->
+                    <div class="dashboard-card">
+                        <div class="card-header">
+                            <h3>Transfer to Other Users</h3>
+                        </div>
                         <form id="transferForm" class="transfer-form">
                             <div class="form-group">
                                 <label for="fromAccount">From Account</label>
@@ -194,28 +304,38 @@
                             
                             <div class="form-group">
                                 <label for="toAccount">To Account Number</label>
-                                <input type="text" id="toAccount" name="toAccountId" placeholder="Enter account number" required>
+                                <input type="text" id="toAccount" name="toAccountId" 
+                                       placeholder="Enter account number" required>
                             </div>
                             
                             <div class="form-group">
-                                <label for="amount">Amount</label>
-                                <input type="number" id="amount" name="amount" step="0.01" min="0.01" required>
+                                <label for="amount">Amount ($)</label>
+                                <input type="number" id="amount" name="amount" 
+                                       step="0.01" min="0.01" placeholder="0.00" required>
                             </div>
                             
                             <div class="form-group">
                                 <label for="description">Description</label>
-                                <input type="text" id="description" name="description" placeholder="Transfer description">
+                                <input type="text" id="description" name="description" 
+                                       placeholder="Transfer description (optional)">
                             </div>
                             
                             <button type="submit" class="btn btn-primary btn-full">
-                                <i class="fas fa-paper-plane"></i> Transfer
+                                <i class="fas fa-paper-plane"></i> Transfer Money
                             </button>
                         </form>
                     </div>
                     
                     <!-- Recent Transactions -->
                     <div class="dashboard-card full-width">
-                        <h3>Recent Transactions</h3>
+                        <div class="card-header">
+                            <h3>Recent Transactions</h3>
+                            <div class="transaction-filter">
+                                <select id="transactionAccountFilter" onchange="filterTransactions()">
+                                    <option value="all">All Accounts</option>
+                                </select>
+                            </div>
+                        </div>
                         <div id="transactionsList" class="transactions-list">
                             <!-- Transactions will be loaded here -->
                         </div>
@@ -225,7 +345,22 @@
         </section>
     </main>
 
-    
+    <!-- Notification -->
+    <div id="notification" class="notification hidden">
+        <span id="notificationMessage"></span>
+        <button onclick="hideNotification()" class="notification-close">
+            <i class="fas fa-times"></i>
+        </button>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="loading-overlay hidden">
+        <div class="loading-spinner">
+            <i class="fas fa-spinner fa-spin"></i>
+            <p>Loading...</p>
+        </div>
+    </div>
+
     <script src="app.js"></script>
 </body>
 </html>

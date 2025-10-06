@@ -32,44 +32,17 @@ public class AccountController {
         return ResponseEntity.ok(account);
     }
 
-    @GetMapping("/number/{accountNumber}")
-    public ResponseEntity<Account> getAccountByNumber(@PathVariable String accountNumber) {
-        Account account = accountService.getAccountByNumber(accountNumber);
-        return ResponseEntity.ok(account);
-    }
-
     @PostMapping("/create")
-    public ResponseEntity<?> createAccount(@RequestParam Long userId) {
-        try {
-            Account account = accountService.createAccount(userId);
-            Map<String, Object> response = new HashMap<>();
-            response.put("message", "Account created successfully with $5000 demo money");
-            response.put("account", account);
-            return ResponseEntity.ok(response);
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
-        }
-    }
-
-    @PostMapping("/create-with-balance")
-    public ResponseEntity<?> createAccountWithBalance(
-            @RequestParam Long userId,
-            @RequestParam Double initialBalance) {
-        try {
-            Account account = accountService.createAccountWithBalance(userId, initialBalance);
-            Map<String, Object> response = new HashMap<>();
-            response.put("message", "Account created successfully with $" + initialBalance);
-            response.put("account", account);
-            return ResponseEntity.ok(response);
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
-        }
+    public ResponseEntity<Account> createAccount(@RequestParam Long userId) {
+        Account account = accountService.createAccount(userId);
+        return ResponseEntity.ok(account);
     }
 
     @PostMapping("/{accountId}/deposit")
     public ResponseEntity<?> depositMoney(
-            @PathVariable Long accountId,
-            @RequestParam Double amount) {
+        @PathVariable Long accountId,
+        @RequestParam Double amount) {
+        
         try {
             accountService.depositMoney(accountId, amount);
             Map<String, String> response = new HashMap<>();
@@ -82,8 +55,9 @@ public class AccountController {
 
     @PostMapping("/{accountId}/withdraw")
     public ResponseEntity<?> withdrawMoney(
-            @PathVariable Long accountId,
-            @RequestParam Double amount) {
+        @PathVariable Long accountId,
+        @RequestParam Double amount) {
+        
         try {
             accountService.withdrawMoney(accountId, amount);
             Map<String, String> response = new HashMap<>();
@@ -94,54 +68,35 @@ public class AccountController {
         }
     }
 
-    @PostMapping("/user/{userId}/add-demo-money")
-    public ResponseEntity<?> addDemoMoneyToAllUserAccounts(
-            @PathVariable Long userId,
-            @RequestParam(defaultValue = "5000.00") Double amount) {
-        try {
-            accountService.addDemoMoneyToAllUserAccounts(userId, amount);
-            Map<String, String> response = new HashMap<>();
-            response.put("message", "Successfully added $" + amount + " demo money to all accounts");
-            return ResponseEntity.ok(response);
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
-        }
-    }
-
     @PostMapping("/transfer")
     public ResponseEntity<?> transferMoney(
-            @RequestParam Long fromAccountId,
-            @RequestParam Long toAccountId,
-            @RequestParam Double amount) {
+        @RequestParam Long fromAccountId,
+        @RequestParam Long toAccountId,
+        @RequestParam Double amount,
+        @RequestParam(required = false) String description) {
+        
         try {
-            accountService.transferMoney(fromAccountId, toAccountId, amount);
+            String transferDescription = description != null ? description : "Fund Transfer";
+            accountService.transferMoney(fromAccountId, toAccountId, amount, transferDescription);
             Map<String, String> response = new HashMap<>();
-            response.put("message", "Successfully transferred $" + amount + " between accounts");
+            response.put("message", "Successfully transferred $" + amount + " to account");
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
 
-    @GetMapping("/user/{userId}/total-balance")
-    public ResponseEntity<?> getTotalBalance(@PathVariable Long userId) {
+    @PostMapping("/user/{userId}/add-demo-money")
+    public ResponseEntity<?> addDemoMoneyToAllUserAccounts(@PathVariable Long userId) {
         try {
-            Double totalBalance = accountService.getTotalBalanceByUserId(userId);
-            Map<String, Object> response = new HashMap<>();
-            response.put("totalBalance", totalBalance);
-            response.put("userId", userId);
-            return ResponseEntity.ok(response);
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
-        }
-    }
-
-    @DeleteMapping("/{accountId}")
-    public ResponseEntity<?> deleteAccount(@PathVariable Long accountId) {
-        try {
-            accountService.createAccount(accountId);
+            // Add money to each account
+            List<Account> accounts = accountService.getAccountsByUserId(userId);
+            for (Account account : accounts) {
+                accountService.depositMoney(account.getId(), 5000.00);
+            }
+            
             Map<String, String> response = new HashMap<>();
-            response.put("message", "Account deleted successfully");
+            response.put("message", "Added $5000 demo money to all accounts");
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(e.getMessage());
